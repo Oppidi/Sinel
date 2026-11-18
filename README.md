@@ -10,26 +10,20 @@ English | [中文](README-zh.md)
 
 This proxy accurately reproduces the core obfuscation mechanism of the official `Signal-TLS-Proxy`, while leveraging Fly.io's global Anycast edge network and providing zero-conflict multi-protocol multiplexing on port 443:
 
-```
-[ Client (Signal App / Web Browser) ]
-           │
-           │  1. Outer TLS connection (Port 443, SNI: your-domain.com)
-           ▼
-[ Fly.io Global Edge (443) ]
-           │  • Automated Let's Encrypt certificate issuance and renewals
-           │  • handlers = ["tls"] (terminates outer TLS without HTTP parsing)
-           ▼
-[ Rust Core Proxy Engine (:8080) ]
-           │  2. Receives decrypted raw TCP stream
-           │  3. Zero-copy multi-protocol inspection:
-           │     ├─ If Signal TLS (0x16): Sniffs inner SNI (e.g. chat.signal.org) & validates against whitelist
-           │     └─ If HTTP: Camouflage routing (302 redirect / 404 / /state Dashboard)
-           ▼
-  ┌───────────────┬────────────────────────────┐
-  │ (Signal TLS)  │ (HTTP Web Access)          │
-  ▼               ▼                            ▼
-[ Signal Servers ]                             [ Camouflage / Dashboard ]
-(chat.signal.org:443)                         (302 Redirect / 404 / Web UI)
+```mermaid
+flowchart TD
+    Client["Client (Signal App / Web Browser)"]
+    Edge["Fly.io Global Edge (:443)"]
+    Proxy["Rust Core Proxy Engine (:8080)"]
+    Sniff{"Zero-copy Protocol Inspection"}
+    Signal["Signal Servers (chat.signal.org:443)"]
+    Web["Camouflage / Dashboard (302 Redirect / 404 / Web UI)"]
+
+    Client -->|"1. Outer TLS (Port 443, SNI: your-domain.com)"| Edge
+    Edge -->|"2. Terminates outer TLS (handlers = tls), raw TCP stream"| Proxy
+    Proxy -->|"3. Inspect first byte"| Sniff
+    Sniff -->|"Signal TLS (0x16): Sniff inner SNI & whitelist check"| Signal
+    Sniff -->|"HTTP: Camouflage routing (/state, 302, 404)"| Web
 ```
 
 ### Key Features

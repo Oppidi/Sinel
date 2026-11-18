@@ -10,26 +10,20 @@
 
 本代理精准还原了官方 `Signal-TLS-Proxy` 的核心能力，同时巧妙利用了 Fly.io 的网络基础设施，并实现了 443 端口下的零冲突多协议智能复用：
 
-```
-[ 客户端 (Signal App / 浏览器) ]
-           │
-           │  1. 外层 TLS 连接 (端口 443, SNI: your-domain.com)
-           ▼
-[ Fly.io Global Edge (443) ]
-           │  • 自动配置并续签 Let's Encrypt 证书
-           │  • handlers = ["tls"] (解开外层 TLS，不执行任何 HTTP 语法解析)
-           ▼
-[ Rust 核心代理服务 (:8080) ]
-           │  2. 接收解密后的 TCP 裸流
-           │  3. 零拷贝多协议嗅探分流：
-           │     ├─ 若为 Signal TLS (0x16)：提取内层 SNI (如 chat.signal.org) 并通过白名单校验
-           │     └─ 若为普通 HTTP：伪装路由分流 (302 跳转 / 404 / /state 仪表盘)
-           ▼
-  ┌───────────────┬────────────────────────────┐
-  │ (Signal TLS)  │ (HTTP Web 访问)            │
-  ▼               ▼                            ▼
-[ Signal 官方服务器 ]                          [ 伪装响应 / 仪表盘 ]
-(chat.signal.org:443)                         (302 重定向 / 404 / Web 引导页)
+```mermaid
+flowchart TD
+    Client["客户端 (Signal App / 浏览器)"]
+    Edge["Fly.io Global Edge (:443)"]
+    Proxy["Rust 核心代理服务 (:8080)"]
+    Sniff{"零拷贝多协议嗅探分流"}
+    Signal["Signal 官方服务器 (chat.signal.org:443)"]
+    Web["伪装响应 / 仪表盘 (302 重定向 / 404 / Web 引导页)"]
+
+    Client -->|"1. 外层 TLS 连接 (端口 443, SNI: your-domain.com)"| Edge
+    Edge -->|"2. 解开外层 TLS (handlers = tls)，透传 TCP 裸流"| Proxy
+    Proxy -->|"3. 首字节嗅探"| Sniff
+    Sniff -->|"Signal TLS (0x16)：提取内层 SNI 并校验白名单"| Signal
+    Sniff -->|"普通 HTTP：伪装路由分流 (/state / 302 / 404)"| Web
 ```
 
 ### 核心特性
